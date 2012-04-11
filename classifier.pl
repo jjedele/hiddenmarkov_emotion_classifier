@@ -76,8 +76,11 @@ emission_probability(5, surprise, 0.11).
 emission_probability(6, surprise, 0.12).
 emission_probability(7, surprise, 0.46).
 
-/* program */
-% viterbi(+Emotions, +Observations, -ResultSequence).
+/* viterbi is the start point for the whole program */
+/* run sis query like sis! */
+% viterbi([anger, disgust, disdain, surprise, fear], [0, 0, 0], X).
+
+% viterbi(+ListOfAllEmotions, +Observations, -ResultSequence).
 viterbi(Emotions, Observations, Result) :-
 	is_list(Observations),
 	length(Observations, OL),
@@ -86,6 +89,8 @@ viterbi(Emotions, Observations, Result) :-
 	process_observations(Observations, 1, Emotions, InitProbs, Result) % start recursive processing of observations
 	.
 
+/* initial_probabilities is used to initialize the first column of the matrix */
+% initial_probabilities(+ListOfAllEmotions, -FirstColumn)
 initial_probabilities([], []).
 
 initial_probabilities([EmoH|EmoT], InitialProbs) :-
@@ -94,10 +99,12 @@ initial_probabilities([EmoH|EmoT], InitialProbs) :-
 	InitialProbs = .(EmoH-CurProb, IntermediateProbs)
 	.
 
+/* process_observations realizes the recursion over the observations (x-axis of matrix) */
+% process_observations(+ObservationList, +ObservationCounter, +ListOfAllEmotions, +LastCalculatedColumn, -ResultingViterbiPath)
 process_observations([], Count,  _, LastColumn, Result) :-
 	true, % don't know why, but it only works like this
 	LastCount is Count-1,
-	column_max(LastColumn, Max, ArgMax), % find max probability in last column,
+	column_max(LastColumn, _, ArgMax), % find max probability in last column,
 	viterbi_path(ArgMax, LastCount, Result)
 	.
 
@@ -107,15 +114,19 @@ process_observations([OH|OT], Count, Emotions, LastColumn, Result) :-
 	process_observations(OT, NewCount, Emotions, Column, Result)
 	.
 
-process_emotions(O, [], _, _, []).
+/* process_emotions realizes the recursion over the emotions (y-axis of matrix) */
+% process_emotions(+CurrentObservation, +ListOfAllEmotions, +LastCalculatedColumn, -NewMatrixColumn)
+process_emotions(_, [], _, _, []).
 
-process_emotions(O, [EH|ET], Count, FormerProbs, UpdatedMatrixColumn) :-
-	process_emotions(O, ET, Count, FormerProbs, MatrixColumn),
-	best_predecessor(FormerProbs, EH, O, Max, ArgMax),
-	asserta(matrix_path(Count, EH, ArgMax)),
-	UpdatedMatrixColumn = .(ArgMax-Max, MatrixColumn)
+process_emotions(O, [EH|ET], Count, LastColumn, UpdatedMatrixColumn) :-
+	process_emotions(O, ET, Count, LastColumn, MatrixColumn), % recurse over all emotions
+	best_predecessor(LastColumn, EH, O, Max, ArgMax), % find the best fitting predecessor in last column
+	asserta(matrix_path(Count, EH, ArgMax)), % add the taken path to the knowledge base
+	UpdatedMatrixColumn = .(ArgMax-Max, MatrixColumn) % add the probability from the best predecessor to current emotion to current column
 	.
 
+/* best_predecessor determines the most likely emotion in the last column for the current cell */
+% best_predecessor(+LastColumn, +CurrentEmotion, +CurrentObservation, -MaximumProbability, -MaximizingEmotionInLastColumn)
 best_predecessor([], _, _, -1, na).
 
 best_predecessor(FormerProbs, CurrentEmotion, Observation, Max, ArgMax) :-
@@ -129,31 +140,33 @@ best_predecessor(FormerProbs, CurrentEmotion, Observation, Max, ArgMax) :-
 	transition_probability(CurrentEmotion, FormerEmotion, TransProb), % calculate the complete probability for the current cell 
 	emission_probability(Observation, CurrentEmotion, EmiProb),
 	CurrentProb is FormerProb*TransProb*EmiProb,
-	!,
+	%!,
 	(CurrentProb >= OtherMax -> Max is CurrentProb, ArgMax = FormerEmotion ; Max is OtherMax, ArgMax = OtherArgMax) % manage max
 	.
 
+/* column_max is used after the last observation to determine the endpoint with the highest probability */
+% column_max(+Column, -MaximumProbability, -MaximizingEmotion)
 column_max([], -1, na).
 
 column_max(Column, Max, ArgMax) :-
 	is_list(Column),
 	length(Column, LL),
 	LL > 0,
-	pairs_keys(Column, [KeyH|KeyT]),
+	pairs_keys(Column, [KeyH|KeyT]), % seperate keys and values from key-value list
 	pairs_values(Column, [ValH|ValT]),
-	pairs_keys_values(ColumnT, KeyT, ValT),
-	column_max(ColumnT, OtherMax, OtherArgMax),
-	(ValH >= OtherMax -> Max is ValH, ArgMax = KeyH ; Max is OtherMax, ArgMax = OtherArgMax)
+	pairs_keys_values(ColumnT, KeyT, ValT), % and put the tails together again for recursion
+	column_max(ColumnT, OtherMax, OtherArgMax), % recurse
+	(ValH >= OtherMax -> Max is ValH, ArgMax = KeyH ; Max is OtherMax, ArgMax = OtherArgMax) % manage the maximum
 	.
 
+/* viterbi_path realizes the backtracking to determine the optimal path once the endpoint with the highest probability was found */
+% viterbi_path(+Emotion, +CurrentPathLength, -Path)
 viterbi_path(_, 0, []).
 
-viterbi_path(Observation, PathLength, Path) :-
+viterbi_path(Emotion, PathLength, Path) :-
 	HeadLength is PathLength-1,
-	matrix_path(PathLength, Observation, LastObservation),
-	viterbi_path(LastObservation, HeadLength, HeadPath),
+	matrix_path(PathLength, Emotion, PreviousEmotion), % is dynamically asserted in the forward round
+	viterbi_path(PreviousEmotion, HeadLength, HeadPath), % recurse until complete path is backtracked
 	%!,
-	append(HeadPath, [LastObservation], Path)
+	append(HeadPath, [PreviousEmotion], Path)
 	.
-
-% viterbi([anger, disgust, disdain, surprise, fear], [0, 0, 0], X).
