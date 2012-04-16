@@ -76,10 +76,15 @@ emission_probability(5, surprise, 0.11).
 emission_probability(6, surprise, 0.12).
 emission_probability(7, surprise, 0.46).
 
-/* viterbi is the start point for the whole program */
 /* run sis query like sis! */
 % viterbi([anger, disgust, disdain, surprise, fear], [0, 0, 0], X).
+/* Reichardt Data 1 */
+% viterbi([anger, disgust, disdain, surprise, fear], [0,0,5,7,7,7,7,7,7,7,7,7,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,5,7,7,7,7,7,7,7,7,3,2,0,0,0,0,0,0], X).
+/* Reichardt Data 2 */
+% viterbi([anger, disgust, disdain, surprise, fear], [7,7,7,7,7,7,0,4,4,4,4,4,4,0,0,0,0,0,0,0,0,0,0,4,5,7,7,7,7,7,7,7,7,3,3,0,0,0,0,0,0,4,4,4,4,4,4,4,4,4,4,0,3,7,7,7,7,7,7,7], X).
 
+
+/* viterbi is the start point for the whole program */
 % viterbi(+ListOfAllEmotions, +Observations, -ResultSequence).
 viterbi(Emotions, Observations, Result) :-
 	is_list(Observations),
@@ -174,6 +179,8 @@ viterbi_path(Emotion, PathLength, Path) :-
 	append(HeadPath, [PreviousEmotion], Path)
 	.
 
+/* used to output the matrix */
+% debug_matrix(+CurrentEmotionList, +ColumnNo, +CompleteEmotionList)
 debug_matrix(_, 0, _).
 
 debug_matrix([], ColumnNo, AllEmotions) :-
