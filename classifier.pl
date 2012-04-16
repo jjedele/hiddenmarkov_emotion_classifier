@@ -101,11 +101,14 @@ initial_probabilities([EmoH|EmoT], InitialProbs) :-
 
 /* process_observations realizes the recursion over the observations (x-axis of matrix) */
 % process_observations(+ObservationList, +ObservationCounter, +ListOfAllEmotions, +LastCalculatedColumn, -ResultingViterbiPath)
-process_observations([], Count,  _, LastColumn, Result) :-
+process_observations([], Count, Emotions, LastColumn, Result) :-
 	true, % don't know why, but it only works like this
 	LastCount is Count-1,
+	debug_matrix(Emotions, LastCount, Emotions),
 	column_max(LastColumn, _, ArgMax), % find max probability in last column,
-	viterbi_path(ArgMax, LastCount, Result)
+	viterbi_path(ArgMax, LastCount, Result), % backtrack the taken path
+	retractall(matrix_path(_, _, _)),
+	retractall(matrix_probs(_, _, _))
 	.
 
 process_observations([OH|OT], Count, Emotions, LastColumn, Result) :-
@@ -121,6 +124,7 @@ process_emotions(_, [], _, _, []).
 process_emotions(O, [EH|ET], Count, LastColumn, UpdatedMatrixColumn) :-
 	process_emotions(O, ET, Count, LastColumn, MatrixColumn), % recurse over all emotions
 	best_predecessor(LastColumn, EH, O, Max, ArgMax), % find the best fitting predecessor in last column
+	asserta(matrix_probs(Count, EH, Max)), % add probability to knowledge base
 	asserta(matrix_path(Count, EH, ArgMax)), % add the taken path to the knowledge base
 	UpdatedMatrixColumn = .(ArgMax-Max, MatrixColumn) % add the probability from the best predecessor to current emotion to current column
 	.
@@ -140,7 +144,6 @@ best_predecessor(FormerProbs, CurrentEmotion, Observation, Max, ArgMax) :-
 	transition_probability(CurrentEmotion, FormerEmotion, TransProb), % calculate the complete probability for the current cell 
 	emission_probability(Observation, CurrentEmotion, EmiProb),
 	CurrentProb is FormerProb*TransProb*EmiProb,
-	%!,
 	(CurrentProb >= OtherMax -> Max is CurrentProb, ArgMax = FormerEmotion ; Max is OtherMax, ArgMax = OtherArgMax) % manage max
 	.
 
@@ -169,4 +172,20 @@ viterbi_path(Emotion, PathLength, Path) :-
 	viterbi_path(PreviousEmotion, HeadLength, HeadPath), % recurse until complete path is backtracked
 	%!,
 	append(HeadPath, [PreviousEmotion], Path)
+	.
+
+debug_matrix(_, 0, _).
+
+debug_matrix([], ColumnNo, AllEmotions) :-
+	ColumnNo > 0,
+	PreviousColumnNo is ColumnNo-1,
+	debug_matrix(AllEmotions, PreviousColumnNo, AllEmotions)
+	.
+
+debug_matrix([EmoH|EmoT], ColumnNo, AllEmotions) :-
+	ColumnNo > 0,
+	matrix_path(ColumnNo, EmoH, Dest),
+	matrix_probs(ColumnNo, EmoH, Prob),
+	write('Column: '), write(ColumnNo), write(' Emotion: '),write(EmoH), write( '('), write(Prob), write(')  --> '), write(Dest), nl,
+	debug_matrix(EmoT, ColumnNo, AllEmotions)
 	.
